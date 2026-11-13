@@ -1,0 +1,164 @@
+{
+  "id": "root",
+  "type": "row",
+  "theme": "inkpaw-hollow",
+  "background": "chrome",
+  "titlebar": "none",
+  "traffic_lights": [
+    12,
+    16
+  ],
+  "children": [
+    {
+      "id": "work",
+      "type": "column",
+      "padding": 8,
+      "gap": 8,
+      "children": [
+        {
+          "id": "forest",
+          "type": "block",
+          "size": {
+            "px": 240
+          },
+          "min": 180,
+          "max": 320,
+          "window_drag": true,
+          "content": {
+            "mod": "inkpaw-forest"
+          },
+          "radius": 10,
+          "background": "surface"
+        },
+        {
+          "id": "below",
+          "type": "column",
+          "gap": 6,
+          "children": [
+            {
+              "id": "tabs",
+              "type": "block",
+              "size": {
+                "px": 44
+              },
+              "content": {
+                "mod": "inkpaw-tabs"
+              }
+            },
+            {
+              "id": "content",
+              "type": "row",
+              "gap": 8,
+              "children": [
+                {
+                  "id": "desk",
+                  "type": "column",
+                  "gap": 6,
+                  "children": [
+                    {
+                      "id": "main",
+                      "type": "block",
+                      "background": "background",
+                      "radius": 10,
+                      "shadow": "sm",
+                      "content": {
+                        "tab": "active",
+                        "pane": {
+                          "header": {
+                            "content": {
+                              "mod": "inkpaw-pane"
+                            },
+                            "reveal": "always",
+                            "height": 28,
+                            "position": "top"
+                          },
+                          "background": "background",
+                          "focus": {
+                            "width": 2,
+                            "color": "accent"
+                          },
+                          "gap": 8,
+                          "lone": true
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "id": "panel",
+                  "type": "column",
+                  "hidden": true,
+                  "size": {
+                    "px": 368
+                  },
+                  "min": 280,
+                  "max": 900,
+                  "children": [
+                    {
+                      "id": "panel-body",
+                      "type": "stack",
+                      "active": "files",
+                      "children": [
+                        {
+                          "id": "files",
+                          "type": "block",
+                          "content": {
+                            "mod": "files"
+                          }
+                        },
+                        {
+                          "id": "changes",
+                          "type": "block",
+                          "content": {
+                            "mod": "changes"
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "id": "notebook",
+                  "type": "column",
+                  "size": {
+                    "px": 340
+                  },
+                  "min": 280,
+                  "max": 480,
+                  "resizable": true,
+                  "gap": 0,
+                  "background": "background",
+                  "radius": 10,
+                  "shadow": "sm",
+                  "children": [
+                    {
+                      "id": "journal",
+                      "type": "block",
+                      "content": {
+                        "mod": "inkpaw-journal"
+                      }
+                    },
+                    {
+                      "id": "shed",
+                      "type": "block",
+                      "size": {
+                        "px": 200
+                      },
+                      "content": {
+                        "mod": "inkpaw-shed",
+                        "props": {
+                          "role": "shed"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "preview": "layouts/inkpaw-hollow.png"
+}

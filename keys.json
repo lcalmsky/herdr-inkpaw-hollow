@@ -1,0 +1,12 @@
+{
+  "layout:inkpaw-hollow": {
+    "ctrl-alt-p": "inkpaw-forest.toggle",
+    "ctrl-shift-a": "mod.open:inkpaw-shed",
+    "cmd-=": "inkpaw-journal.font_in",
+    "cmd-+": "inkpaw-journal.font_in",
+    "cmd--": "inkpaw-journal.font_out",
+    "cmd-0": "inkpaw-journal.font_reset",
+    "cmd-[": "inkpaw-journal.back",
+    "cmd-]": "inkpaw-journal.forward"
+  }
+}
