@@ -41,9 +41,23 @@ const SWIPE_H = 13;
 const ROW = 22;
 const HEAD_ROW = 28;
 const MARGIN_X = 28;
+const GRID_TOP = HEAD_ROW - ROW;
 const PAGE_PAD_L = 40;
 const PAGE_PAD_R = 14;
 const STEP_ROWS = 6;
+
+// Today's entry opens with two 28 px rows and a 16 px spacer, so the page's row boundaries are 28,
+// 56, 72 and every 22 px after that. The viewport stops one pixel past a boundary: whole rows stay
+// whole and that boundary's rule is the single rule at the shed's edge.
+export function rowsViewport(height) {
+  if (!(height > 0)) return 0;
+  const grid = 2 * HEAD_ROW + ROW - GRID_TOP;
+  const edge = height < HEAD_ROW ? 0
+    : height < 2 * HEAD_ROW ? HEAD_ROW
+      : height < grid ? 2 * HEAD_ROW
+        : grid + Math.floor((height - grid) / ROW) * ROW;
+  return edge ? Math.min(height, edge + 1) : 0;
+}
 
 export const SHARED_KEY = "inkpaw";
 const SEEN_KEY = "inkpaw.journal.seen";
@@ -1833,6 +1847,7 @@ export default class LineartJournal extends View {
     const rows = this.pageRows(data, cx);
     // "Today's entry" sits in a 28 px row level with the terminal's pane header.
     const pageHeight = rows.length * ROW + (HEAD_ROW - ROW);
+    const trim = this.pageH > 0 ? this.pageH - rowsViewport(this.pageH) : 0;
     return div().id("inkpaw-journal").relative().size_full().bg(PAPER).text_color(INK)
       .font_family(BODY_FONT).text_size(12)
       .track_focus(this.handle)
@@ -1843,7 +1858,7 @@ export default class LineartJournal extends View {
         this.pageW = size.width;
         cx.notify();
       })
-      .child(v_flex().absolute().left(0).top(0).right(0).bottom(0).overflow_y_scroll()
+      .child(v_flex().absolute().left(0).top(0).right(0).bottom(trim).overflow_y_scroll()
         .child(div().relative().w_full().h(pageHeight)
           .child(this.rules(pageHeight))
           .child(v_flex().relative().w_full().pl(PAGE_PAD_L).pr(PAGE_PAD_R).children(rows))));

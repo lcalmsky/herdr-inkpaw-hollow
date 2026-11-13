@@ -14,6 +14,14 @@ const SPACES = [
   { id: "s-acorn", name: "acorn-cli", branch: "cache-eviction" },
   { id: "s-moss", name: "moss-ui", branch: "shadows" },
   { id: "s-tea", name: "PAW-31 tea timer", branch: "presets" },
+  { id: "s-fern", name: "fern-site", branch: "main" },
+  { id: "s-swap", name: "PAW-44 seed swap", branch: "swap-board" },
+  { id: "s-hive", name: "hive-metrics", branch: "main" },
+  { id: "s-pond", name: "pond-sync", branch: "ripple" },
+  { id: "s-burrow", name: "PAW-52 burrow maps", branch: "burrows" },
+  { id: "s-kiln", name: "kiln-queue", branch: "main" },
+  { id: "s-wren", name: "wren-notes", branch: "main" },
+  { id: "s-mill", name: "PAW-58 mill wheel", branch: "speed" },
 ];
 
 const TITLES = {
@@ -23,6 +31,14 @@ const TITLES = {
   "s-acorn": ["Fix the acorn cache eviction", "Add a --dry-run flag"],
   "s-moss": ["Tune the mossy button shadows", "Polish the settings drawer"],
   "s-tea": ["Ship the tea timer presets"],
+  "s-fern": ["Port the fern site to static pages", "Add a dew-point widget"],
+  "s-swap": ["Wire the seed swap board", "Sort the seed packet archive"],
+  "s-hive": ["Graph the honey flow by week"],
+  "s-pond": ["Debounce the pond sensor sync"],
+  "s-burrow": ["Merge the burrow map layers"],
+  "s-kiln": ["Retry stuck kiln jobs"],
+  "s-wren": ["Tag the birdsong recordings"],
+  "s-mill": ["Smooth the mill wheel speed graph"],
 };
 
 const STATUS = [
@@ -32,6 +48,14 @@ const STATUS = [
   ["s-acorn", "blocked"], ["s-acorn", "working"],
   ["s-moss", "working"], ["s-moss", "done"],
   ["s-tea", "done"],
+  ["s-fern", "working"], ["s-fern", "idle"],
+  ["s-swap", "blocked"], ["s-swap", "done"],
+  ["s-hive", "working"],
+  ["s-pond", "idle"],
+  ["s-burrow", "blocked"],
+  ["s-kiln", "working"],
+  ["s-wren", "done"],
+  ["s-mill", "working"],
 ];
 
 const LEADS = {
@@ -46,6 +70,16 @@ const LEADS = {
   "Tune the mossy button shadows": "Comparing three shadow ramps for the mossy buttons.",
   "Polish the settings drawer": "The settings drawer slides without a stutter now.",
   "Ship the tea timer presets": "Three presets are in: green, herbal and a very slow oolong.",
+  "Port the fern site to static pages": "The fern pages render from the same markdown the trail uses.",
+  "Add a dew-point widget": "The widget reads the morning damp off the garden sensor.",
+  "Wire the seed swap board": "The swap board lists two dates — which calendar should win?",
+  "Sort the seed packet archive": "The archive is sorted by sowing month and the labels are reprinted.",
+  "Graph the honey flow by week": "The honey-flow chart now groups readings by week.",
+  "Debounce the pond sensor sync": "Sensor bursts fold into one sync every ten seconds.",
+  "Merge the burrow map layers": "Two layers disagree on the old oak tunnel — keep which one?",
+  "Retry stuck kiln jobs": "Stuck kiln jobs retry twice, then wait for a person.",
+  "Tag the birdsong recordings": "Every recording now carries its wren, robin or finch tag.",
+  "Smooth the mill wheel speed graph": "Smoothing the speed graph without hiding the stalls.",
 };
 
 const CWD = {
@@ -55,6 +89,14 @@ const CWD = {
   "s-acorn": "/work/acorn-cli",
   "s-moss": "/work/moss-ui",
   "s-tea": "/work/tea-timer",
+  "s-fern": "/work/fern-site",
+  "s-swap": "/work/seed-swap",
+  "s-hive": "/work/hive-metrics",
+  "s-pond": "/work/pond-sync",
+  "s-burrow": "/work/burrow-maps",
+  "s-kiln": "/work/kiln-queue",
+  "s-wren": "/work/wren-notes",
+  "s-mill": "/work/mill-wheel",
 };
 
 const STEPS = [
@@ -145,6 +187,8 @@ const sessions = rows.map((row, i) => {
 });
 
 export const DEMO = {
+  // The animal the gallery shot shows greeting: the burrow-map session, which the notebook also picks.
+  selected: "t-18",
   spaces: SPACES.map((space, i) => ({
     id: space.id,
     index: i + 1,
@@ -215,6 +259,13 @@ export const DEMO = {
         label: null,
         plan: null,
         usage: { five: { used: 12, reset: soon(150) }, seven: { used: 81, reset: soon(60 * 40) }, fable: null },
+      },
+      {
+        name: "night-owl",
+        email: "",
+        label: null,
+        plan: null,
+        usage: { five: { used: 92, reset: soon(70) }, seven: { used: 35, reset: soon(60 * 90) }, fable: null },
       },
     ],
     codex: { active: "default", accounts: [] },

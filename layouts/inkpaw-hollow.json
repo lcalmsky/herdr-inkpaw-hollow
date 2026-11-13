@@ -142,7 +142,7 @@
                       "id": "shed",
                       "type": "block",
                       "size": {
-                        "px": 200
+                        "px": 154
                       },
                       "content": {
                         "mod": "inkpaw-shed",

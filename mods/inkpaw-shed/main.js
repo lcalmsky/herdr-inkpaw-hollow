@@ -836,8 +836,7 @@ export default class ClaudeAccounts extends View {
   }
 
   // The wood shed is the notebook's last section: the same paper, margin line and 22 px rules as
-  // the journal above it, a section title, then a name row and a gauge row per account, one empty
-  // ruled line between accounts.
+  // the journal above it, a section title, then a name row and a gauge row per account.
   shed(cx) {
     if (!this.demo) {
       const pid = this.focusedPid();
@@ -848,23 +847,16 @@ export default class ClaudeAccounts extends View {
       .child(this.shedRules())
       .child(v_flex().relative().size_full().pl(PAGE_PAD_L).pr(PAGE_PAD_R).overflow_y_scroll()
         .child(this.shedTitle("Woodshed"))
-        .children(list.flatMap((a, i) => [
-          ...(i ? [this.shedGap()] : []),
-          this.shedNameRow(a),
-          this.shedWindowRow(a),
-        ])));
+        .children(list.flatMap((a) => [this.shedNameRow(a), this.shedWindowRow(a)])));
   }
 
-  shedGap() {
-    return div().h(ROW).flex_none();
-  }
-
-  // The journal's ruled paper, continued: faint 22 px rules and one margin line.
+  // The journal's ruled paper, continued: faint 22 px rules and one margin line. The boundary rule
+  // is the journal's own last line, so the first rule here sits one row down.
   shedRules() {
     return div().absolute().inset_0().overflow_hidden()
       .child(div().absolute().left(MARGIN_X).top(0).bottom(0).w(1).bg(INK.amber).opacity(SHED_MARGIN))
       .children(Array.from({ length: 12 }, (_, i) =>
-        div().absolute().left(0).right(0).top(i * ROW).h(1).bg(INK.line).opacity(SHED_RULE)));
+        div().absolute().left(0).right(0).top((i + 1) * ROW).h(1).bg(INK.line).opacity(SHED_RULE)));
   }
 
   // The notebook's last heading: hand-written over the wood marker, with its caption.
@@ -885,6 +877,9 @@ export default class ClaudeAccounts extends View {
   shedNameRow(a) {
     const here = a?.kind !== "model" && a.name === (this.current ?? "default");
     const name = display(a);
+    // A nearly spent window's reset time sits at the end of the name line; the gauge line has no room.
+    const hotWindow = cardWindows(a).find(([, w]) => w && Math.round(w.used) >= 90);
+    const reset = hotWindow ? shedReset(hotWindow) : null;
     const width = handWidth(name, 13) + 6;
     const swipe = PathBuilder.fill().add_polygon(highlighterPoints(width, SWIPE_H, width), true).build();
     const tip = [name, ...cardWindows(a).map(windowText), blockedNow(a) ? "rate-limited" : null]
@@ -899,23 +894,21 @@ export default class ClaudeAccounts extends View {
         .when(here, (el) => el.child(window.paint_path(swipe, sectionTint("shed"))
           .absolute().left(-2).top(Math.round((ROW - SWIPE_H) / 2)).w(width).h(SWIPE_H)))
         .child(div().truncate().font_family(FONT).text_size(13).line_height(`${ROW}px`)
-          .text_color(INK.t1).child(name)));
+          .text_color(INK.t1).child(name)))
+      .when(Boolean(reset), (el) => el.child(div().flex_none().pr(4).font_family(HEADING_FONT)
+        .text_size(13).text_color(INK.amberInk).child(reset)));
   }
 
-  // One window on the gauge row: label, pencil gauge, percentage, and past 90 % a red star and
-  // the reset time.
+  // One window on the gauge row: label, pencil gauge, percentage, and past 90 % a red star.
   shedWindowLine([label, w]) {
     const pct = w ? Math.min(100, Math.round(w.used)) : null;
     const hot = pct != null && pct >= 90;
-    const reset = shedReset([label, w]);
     return h_flex().flex_none().items_center().gap(5)
       .child(div().flex_none().font_family(HEADING_FONT).text_size(14).text_color(INK.t2).child(label))
       .child(this.gaugeMark(w, hot))
       .child(div().flex_none().font_family(HEADING_FONT).text_size(14)
         .text_color(hot ? INK.amberInk : INK.t1).child(shedPercent([label, w])))
-      .when(Boolean(hot), (el) => el.child(this.starMark()))
-      .when(Boolean(reset), (el) => el.child(div().flex_none().font_family(HEADING_FONT).text_size(12)
-        .text_color(INK.t2).child(reset)));
+      .when(Boolean(hot), (el) => el.child(this.starMark()));
   }
 
   // The account's windows on the next 22 px line, side by side.

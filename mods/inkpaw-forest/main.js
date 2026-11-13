@@ -393,7 +393,7 @@ export default class LineArtBand extends View {
       .on_mouse_down("left", (_event, cx2) => cx2.stop_propagation())
       .children(inner);
 
-    if (!walking && a.mood === "lantern") {
+    if (!walking && !selected && a.mood === "lantern") {
       fx.glow.push(this.pic(f, "fx/glow.svg", x + 10, a.y - 22)
         .loop("opacity", { from: 0.35, to: 0.7, period: 2600 + (seed % 500) }));
       fx.top.push(this.bubble(f, x, a.y - 50 - 24 * (fx.levels.get(a.address) || 0), bubbleText(a.title || a.tab_name)));
@@ -684,7 +684,7 @@ export default class LineArtBand extends View {
     const name = event.key;
     const state = shared("inkpaw") ?? {};
     const query = state.query ?? "";
-    const selected = state.selected ?? null;
+    const selected = this.demo ? DEMO.selected : state.selected ?? null;
     const actors = xOrder(layoutScene(this.spacesNow(), this.agentsNow()).actors);
     const plain = !command && !control && !alt;
     const journal = forestKeyCommand(event, query);
@@ -778,7 +778,7 @@ export default class LineArtBand extends View {
     const query = state.query ?? "";
     const tokens = tokensOf(query);
     const topics = state.topics ?? {};
-    const selected = state.selected ?? null;
+    const selected = this.demo ? DEMO.selected : state.selected ?? null;
 
     const cwdByAddress = new Map(termList.map((terminal) => [terminal.address, cwdOf(terminal)]));
     const rows = spaceRows(spaceList, termList, paneList, this.repos);
@@ -808,13 +808,14 @@ export default class LineArtBand extends View {
     this.cabins(f, cabins, cabinDim, back, front, activeCabin(signs));
     back.push(this.pic(f, "bg/ground.svg", 800, 100));
     for (const k of [-1, 1]) back.push(this.pic(f, "bg/ground.svg", 800 + k * DESIGN.width, 100));
-    const levels = bubbleLevels(actors.filter((a) => a.mood === "lantern")
-      .map((a) => ({ address: a.address, x: a.x, width: bubbleWidth(bubbleText(a.title || a.tab_name)) })));
-    const fx = { glow: [], top: [], levels, topics };
     const chosen = actors.find((a) => a.address === selected);
     // Only an animal picked with the forest's own keyboard greets; once the keyboard leaves for a
     // session, it shrinks back at once.
     const greeting = this.handle?.is_focused?.() ? chosen : null;
+    // A greeting animal drops its speech bubble, which would cover its grown head.
+    const levels = bubbleLevels(actors.filter((a) => a.mood === "lantern" && a !== greeting)
+      .map((a) => ({ address: a.address, x: a.x, width: bubbleWidth(bubbleText(a.title || a.tab_name)) })));
+    const fx = { glow: [], top: [], levels, topics };
     // The greeting animal hops once when the choice arrives: up over 160 ms, then down over 220 ms.
     if (greeting && greeting.address !== this.hopKey) {
       this.hopKey = chosen.address;
@@ -875,6 +876,8 @@ export default class LineArtBand extends View {
           cx2.notify();
         }
       })
-      .children([...back, ...front, ...fx.glow, ...signNodes, ...animals, ...fx.top, ...overlay]);
+      // The greeting animal also sits above the neighbours' speech bubbles.
+      .children([...back, ...front, ...fx.glow, ...signNodes, ...(greeting ? animals.slice(0, -1) : animals),
+        ...fx.top, ...(greeting ? animals.slice(-1) : []), ...overlay]);
   }
 }
