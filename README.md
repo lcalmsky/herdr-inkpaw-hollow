@@ -40,6 +40,8 @@ herdr-app do layout.switch --name inkpaw-hollow
 
 The forest needs `git` for its repository fences; the notebook needs `python3`, plus `ps` and `lsof` for the non-Claude agents. The woodshed works without `cca`, but shows no accounts until the bundled `cca` and `node` are available. Gowun Dodum ships inside every mod that draws type.
 
+The runtime files in the mod folders (`cca`, `scan.sh`, `hv`, …) are copies generated from the [herdr-shared](https://github.com/lcalmsky/herdr-shared) submodule at `vendor/herdr-shared`; `git clone --recursive` is only needed for the drift check, not for installing.
+
 ## Keyboard shortcuts
 
 The layout's own section, `layout:inkpaw-hollow`:
