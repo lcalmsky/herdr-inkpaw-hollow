@@ -88,8 +88,33 @@ test("render scrolls the active tab into view once", () => {
   assert.equal(handle.calls.length, calls, "an unchanged render scrolls nowhere");
   view.keyboard = true;
   view.at = 2;
+  view.handle = { is_focused: () => true };
   view.render();
-  assert.ok(handle.calls.includes(2), String(handle.calls));
+  assert.equal(handle.calls.at(-1), 2, "the keyboard's tag while the bar holds the keyboard");
+  delete globalThis.uiScrollHandles;
+  delete globalThis.herdrState;
+});
+
+test("after the bar gives the keyboard back, a tab switched elsewhere still scrolls into view", () => {
+  const tabs = [tab("t0"), tab("t1"), tab("t2", true), tab("t3"), tab("t4"), tab("t5"), tab("t6"), tab("t7")];
+  globalThis.herdrState = { spaces: [spaceWith(tabs)] };
+  globalThis.uiScrollHandles = [];
+  const view = new Tabs();
+  view.init({}, fakeCx());
+  const handle = globalThis.uiScrollHandles.at(-1);
+  let barFocused = true;
+  view.handle = { is_focused: () => barFocused };
+  view.keyboard = true;
+  view.at = 1;
+  view.render();
+  assert.equal(handle.calls.at(-1), 1);
+
+  barFocused = false;
+  tabs[2].active = false;
+  tabs[7].active = true;
+  view.render();
+  assert.equal(view.keyboard, true, "only a click on the bar clears the keyboard flag");
+  assert.equal(handle.calls.at(-1), 7, "the newly active tab, not the bar's old keyboard place");
   delete globalThis.uiScrollHandles;
   delete globalThis.herdrState;
 });

@@ -237,8 +237,8 @@ export default class Tabs extends View {
     const shown = space?.tabs ?? [];
     this.at = Math.min(Math.max(this.at ?? 0, 0), Math.max(0, shown.length - 1));
     const active = shown.findIndex((tab) => tab.active);
-    // The keyboard's tag when it is moving through them, else the active one, stays in view.
-    const reveal = this.keyboard ? this.at : active;
+    // The keyboard's tag while the bar holds the keyboard, else the active one, stays in view.
+    const reveal = this.keyboard && this.handle?.is_focused?.() ? this.at : active;
     this.reveal = reveal;
     const selected = `${shown[reveal]?.id}|${reveal}`;
     if (selected !== this.revealed) {
