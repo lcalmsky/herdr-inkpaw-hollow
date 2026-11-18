@@ -1,12 +1,13 @@
 // Modified from Herdr's shipped `tabs` mod (0.1.12, Apache License 2.0, see LICENSE in this folder):
-// an unnamed tab shows its agent's session name (or its space's name).
+// an unnamed tab shows its agent's session name (or its space's name). The stored panels, the
+// wheel and the scroll to the active tab follow the shipped 0.1.16.
 //
 // The bar is a clothesline: an ink line runs across the top 10 px and every tab is a paper tag
 // hanging from a wooden clothespin. The active tag drops 4 px and its pin takes the accent.
 // Keys, selection, renaming, dragging, the side panels and the window buttons are the shipped
 // behaviors, redrawn.
 import { View, div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, openOverlay, window, shared, layout } from "herdr";
 
 const INK = "#4b4239";
@@ -66,13 +67,40 @@ export function tabName(tab, space, list = []) {
   return /^tb\d+$/.test(tab.name) ? program?.name ?? "Terminal" : tab.name;
 }
 
+// The per-space panel choices; anything stored that isn't a plain object starts empty.
+export function readPanels(raw) {
+  let panels;
+  try { panels = JSON.parse(raw ?? "{}"); } catch { panels = {}; }
+  return panels && typeof panels === "object" && !Array.isArray(panels) ? panels : {};
+}
+
+// One tab per wheel notch. A touchpad or smooth-scrolling mouse sends many small events per
+// gesture: a short swipe or one smoothed notch (about 25 px) switches one tab, a longer swipe
+// keeps going a tab per 60 px, at most one every 100 ms so each shows. Returns the command or null.
+export function wheelStep(swipe, e, now = Date.now()) {
+  if (e.delta_lines) return e.delta_lines.y ? (e.delta_lines.y > 0 ? "tab.prev" : "tab.next") : null;
+  const s = swipe, dy = e.delta?.y ?? 0;
+  // Phases often arrive only as moves (a macOS touchpad included): a pause or a turn starts a new gesture.
+  if (e.touch_phase === "started" || now - s.at > 250 || dy * s.acc < 0) Object.assign(s, { acc: 0, steps: 0 });
+  s.at = now;
+  s.acc += dy;
+  const need = s.steps ? 60 : 20;
+  if (Math.abs(s.acc) < need || now - s.last < 100) return null;
+  s.acc -= Math.sign(s.acc) * need;
+  s.steps++;
+  s.last = now;
+  return dy > 0 ? "tab.prev" : "tab.next";
+}
+
 export default class Tabs extends View {
   init(_props, cx) {
     this.pressed = null;
     this.at = 0;
     this.keyboard = false;
     this.handle = cx.focus_handle();
-    this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}");
+    this.panels = readPanels(localStorage.getItem("panels"));
+    this.scroll = ScrollHandle.new();
+    this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
     // A ring comes from is_focused(), and the shell redraws only on notify or reload.
     cx.timer.every(FOCUS_WATCH_MS, (cx) => this.watchFocus(cx));
   }
@@ -158,6 +186,8 @@ export default class Tabs extends View {
     const close = active ? () => run("tab.close", { id: c.id }) : null;
     return v_flex().id(`tab-${c.id}`).flex_none().items_start().pt(3).cursor_pointer()
       .role("tab").aria_selected(active)
+      // A rename or status mark on this or an earlier tag can push the revealed one out.
+      .when(i <= this.reveal, (el) => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(this.reveal); cx.notify(); }))
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
         this.keyboard = false; this.at = i; this.pressed = i;
@@ -206,6 +236,15 @@ export default class Tabs extends View {
     const space = spaces().find(p => p.active);
     const shown = space?.tabs ?? [];
     this.at = Math.min(Math.max(this.at ?? 0, 0), Math.max(0, shown.length - 1));
+    const active = shown.findIndex((tab) => tab.active);
+    // The keyboard's tag when it is moving through them, else the active one, stays in view.
+    const reveal = this.keyboard ? this.at : active;
+    this.reveal = reveal;
+    const selected = `${shown[reveal]?.id}|${reveal}`;
+    if (selected !== this.revealed) {
+      this.revealed = selected;
+      if (reveal >= 0) this.scroll.scroll_to_item(reveal);
+    }
     this.drawnFocus = this.focusKey();
     const root = layout(), w = window();
     const panel = find(root, "panel"), body = find(root, "panel-body");
@@ -232,14 +271,17 @@ export default class Tabs extends View {
         cx.notify();
       })
       .on_mouse_up("left", () => { this.pressed = null; })
-      .on_scroll_wheel(e => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
+      .on_scroll_wheel((e) => { const step = wheelStep(this.swipe, e); if (step) run(step); })
       .child(div().absolute().left(6).right(6).top(10).h(1).bg("#4b42398c"))
       .child(h_flex().size_full().min_w(0).items_start()
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_start().gap(8).overflow_x_scroll()
+          .track_scroll(this.scroll)
+          .on_size_change((_size, cx) => { if (reveal >= 0) { this.scroll.scroll_to_item(reveal); cx.notify(); } })
           .children(shown.map((c, i) => this.tag(c, i, space, shown))))
         .child(this.newPin())
-        .when(enabled.includes("files"), el => el.child(panelTag("files", "Files")))
-        .when(enabled.includes("changes"), el => el.child(panelTag("changes", "Changes")))
+        // Without a side panel in the layout the buttons would show and hide nothing.
+        .when(Boolean(panel && body) && enabled.includes("files"), el => el.child(panelTag("files", "Files")))
+        .when(Boolean(panel && body) && enabled.includes("changes"), el => el.child(panelTag("changes", "Changes")))
         .when(Boolean(w?.buttons), el => el.child(h_flex().mt(10).flex_none().items_center().gap(2)
           .child(winButton("minimize", w.platform === "windows" ? svg("mods/inkpaw-tabs/win-min.svg").size(16) : "−", () => run("window.minimize")))
           .child(winButton("maximize", w.platform === "windows" ? svg(`mods/inkpaw-tabs/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
