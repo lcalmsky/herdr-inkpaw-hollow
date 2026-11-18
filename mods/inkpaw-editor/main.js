@@ -37,6 +37,13 @@ export function ownPane(paneList, focus) {
   return paneList.filter((p) => p.tab === pane.tab).length > 1 ? pane.pane : null;
 }
 
+// The editor's tab when the editor is that tab's only pane, else null.
+export function loneTab(paneList, focus) {
+  const pane = focus?.pane ? paneList.find((p) => p.pane === focus.pane) : null;
+  if (!pane || pane.mod !== "inkpaw-editor") return null;
+  return paneList.filter((p) => p.tab === pane.tab).length === 1 ? pane.tab : null;
+}
+
 export default class EditorView extends View {
   init(given, cx) {
     const spec = given ?? props() ?? {};
@@ -103,8 +110,20 @@ export default class EditorView extends View {
   }
 
   toTab(cx) {
-    const pane = ownPane(panes(), focused()), file = this.file;
-    if (!pane || !file) return;
+    const list = panes(), focus = focused(), pane = ownPane(list, focus), file = this.file;
+    if (!file) return;
+    if (!pane) {
+      // An editor alone in its tab already is that tab; ownPane never closes a tab's only pane, so the tab takes the file's name.
+      const tab = loneTab(list, focus);
+      if (tab) {
+        run("tab.rename", { id: tab, name: fileLabel(file).name });
+        this.inTab = true;
+      } else {
+        this.stale = "Not moved: click the editor, then Open as tab again";
+      }
+      cx.notify();
+      return;
+    }
     const move = () => {
       try {
         run("tab.new", { name: fileLabel(file).name, mod: "inkpaw-editor", props: { file, tab: true } });
