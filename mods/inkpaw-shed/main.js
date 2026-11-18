@@ -13,7 +13,7 @@
 
 import { View, div, svg, image, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { agents, terminals, focused, run, exec, props, appHome, openOverlay, closeOverlay, knownAgents, shared } from "herdr";
+import { agents, terminals, focused, run, exec, checking, props, appHome, openOverlay, closeOverlay, knownAgents, shared } from "herdr";
 import { charFor, faceSrc } from "./animals.js";
 import {
   gaugeHatchSegments, gaugeOutlinePoints, handWidth, highlighterPoints, sectionCaption, sectionTint, starPoints,
@@ -147,6 +147,12 @@ export function resumeOrStart(name, id, command = DEFAULT_LAUNCH) {
 export function railHere(focusKey, currentKey, current, held) {
   if (!focusKey) return null;
   return currentKey === focusKey ? current : held ?? null;
+}
+
+// The account line runs only inside the session's folder: `unset ...;` in an account's env would
+// otherwise split a `cd X && ...` chain and start Claude Code wherever the shell began.
+export function inFolder(cwd, line) {
+  return `cd '${String(cwd).replace(/'/g, "'\\''")}' || exit 1; ${line}`;
 }
 
 // The display label cca keeps for an account, falling back to the account name.
@@ -461,12 +467,13 @@ export default class ClaudeAccounts extends View {
       this.launchError = null;
       cx.timer.after(50, (cx) => { if (!this.rename && !this.addEdit && !this.launchEdit) this.handle.focus(); });
       cx.timer.every(FOCUS_WATCH_MS, (cx) => this.watchFocus(cx));
-      cx.spawn(async (cx) => { this.launch = await readLaunch(); cx.notify(); });
+      if (!checking()) cx.spawn(async (cx) => { this.launch = await readLaunch(); cx.notify(); });
     }
     if (!this.agents) {
       const cached = shared("new-menu.agents")?.[""];
       if (Array.isArray(cached)) this.agents = cached;
     }
+    if (checking()) return;
     // knownAgents checks again at most once a minute; the menu needs the list before it opens.
     if (!Array.isArray(p.agents)) this.loadAgents(cx);
     cx.timer.every(60000, (cx) => this.loadAgents(cx));
@@ -843,6 +850,8 @@ export default class ClaudeAccounts extends View {
       if ((pid == null ? "" : String(pid)) !== this.focusKey) this.readAccounts(cx, pid);
     }
     const list = this.accounts?.length ? this.accounts : [{ name: "default", email: "", usage: null }];
+    this.shedAxe = this.demo ? this.current : railHere(this.focusKey, this.currentKey, this.current, this.heldHere);
+    if (this.focusKey && this.currentKey === this.focusKey) this.heldHere = this.current;
     return div().id("shed").relative().size_full().min_h(0).bg(INK.card).overflow_hidden()
       .child(this.shedRules())
       .child(v_flex().relative().size_full().pl(PAGE_PAD_L).pr(PAGE_PAD_R).overflow_y_scroll()
@@ -872,10 +881,11 @@ export default class ClaudeAccounts extends View {
         .font_family(HEADING_FONT).text_color(INK.t3).child(sectionCaption("shed")));
   }
 
-  // The name (with the axe when this pane runs as it) on one 22 px line; this pane's account sits
-  // on the shed's wood-coloured marker swipe.
+  // The name (with the axe when the focused Claude Code pane runs as it) on one 22 px line; that
+  // account sits on the shed's wood-coloured marker swipe. No focused Claude Code pane, no axe:
+  // cca then reports the global default, which is not this pane's account.
   shedNameRow(a) {
-    const here = a?.kind !== "model" && a.name === (this.current ?? "default");
+    const here = a?.kind !== "model" && a.name === this.shedAxe;
     const name = display(a);
     // A nearly spent window's reset time sits at the end of the name line; the gauge line has no room.
     const hotWindow = cardWindows(a).find(([, w]) => w && Math.round(w.used) >= 90);
@@ -1024,12 +1034,11 @@ export default class ClaudeAccounts extends View {
     const args = resumeArgs(model, session.id);
     if (!args) return;
     // pane.split takes no folder, so the shell changes into the session's cwd first.
-    const cwd = `'${session.cwd.replace(/'/g, "'\\''")}'`;
     if (model) {
-      this.startPane(["sh", "-lc", `cd ${cwd} && ${launchFor(model, args)}`]);
+      this.startPane(["sh", "-lc", inFolder(session.cwd, launchFor(model, args))]);
       return;
     }
-    this.withLaunch((command) => this.startPane(["sh", "-lc", `cd ${cwd} && ${resumeOrStart(name, session.id, command)}`]));
+    this.withLaunch((command) => this.startPane(["sh", "-lc", inFolder(session.cwd, resumeOrStart(name, session.id, command))]));
   }
 
   startLaunchEdit(cx) {
