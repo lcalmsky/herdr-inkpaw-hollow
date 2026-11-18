@@ -1,12 +1,12 @@
 // The keeper's notebook: one ruled paper page recording the forest. scan.sh reads the sessions
 // every 3 s; everything here is the page itself: a red margin rule, lines every 22 px, a today's
 // entry, a stepping-stone checklist, three letter sections and a paper-note link menu.
-// The page and the forest share query, selection, owner, topics, needs, done and notice
+// The page and the forest share query, selection, owner, topics, PRs, needs, done and notice
 // through shared("inkpaw"), writing only when a value changes.
 
 import { View, div, image, PathBuilder } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { exec, run, appHome, settings, readTextFile, writeTextFile, terminals, panes, agents, focused, nextCommand, props, shared, setShared, openOverlay, closeOverlay } from "herdr";
+import { exec, run, appHome, checking, settings, readTextFile, writeTextFile, terminals, panes, agents, focused, nextCommand, props, shared, setShared, openOverlay, closeOverlay } from "herdr";
 import { charFor, WHO, faceSrc } from "./animals.js";
 import { fieldsOf, fold, matchesQuery, tokensOf } from "./search.js";
 import {
@@ -400,6 +400,25 @@ export function stepHistory(history, delta, alive) {
   return { history, target: null };
 }
 
+// The checklist is a Claude Code skill; a scanned session without an agent is Claude's (scan.sh names the rest).
+export function canRequestChecklist(item) {
+  return Boolean(item?.terminal) && item.raw?.t === "s" && !item.hasChecklist && (item.raw.agent ?? "claude") === "claude";
+}
+
+export function prFields(item) {
+  return [item?.prTag, ...(item?.extraPRs ?? []), ...(item?.prLinks ?? []).flatMap((pr) => [pr.tag, pr.url])].filter(Boolean);
+}
+
+// The forest searches an animal's PRs too, keyed by terminal like the topics.
+export function prsOf(items) {
+  const prs = {};
+  for (const item of items) {
+    const list = item.terminal ? [...new Set(prFields(item))] : [];
+    if (list.length) prs[item.terminal] = list;
+  }
+  return prs;
+}
+
 // The forest's search side wants the notebook's topic per terminal, its Needs you order (oldest
 // first, stalls left out) and its Done order (oldest first).
 export function topicsOf(items) {
@@ -480,6 +499,7 @@ export default class LineartJournal extends View {
       this.sessions = DEMO.sessions;
       this.meta = DEMO.meta;
     }
+    if (checking()) return;
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
@@ -903,7 +923,7 @@ export default class LineartJournal extends View {
       space: [item.place, item.spot?.label, item.raw?.name],
       cwd: item.raw?.cwd,
       ticket: [item.jiraKey, item.keyTag],
-      pr: [item.prTag, ...(item.extraPRs ?? []), ...(item.prLinks ?? []).flatMap((pr) => [pr.tag, pr.url])],
+      pr: prFields(item),
     });
   }
 
@@ -1007,6 +1027,7 @@ export default class LineartJournal extends View {
       query: this.query,
       owner: focused ? "journal" : current.owner === "journal" ? null : current.owner ?? null,
       topics: topicsOf(items),
+      prs: prsOf(items),
       needs: needsOrder(model.attention),
       done: doneOrder(model.done),
       notice: this.noticePayload(),
@@ -1394,7 +1415,7 @@ export default class LineartJournal extends View {
     this.sel = item.sessionId;
     cx.notify();
     const links = linksOf(item);
-    const showChecklist = Boolean(item.terminal) && item.raw?.t === "s" && !item.hasChecklist;
+    const showChecklist = canRequestChecklist(item);
     const stopId = item.backgrounded ? item.raw.jobId ?? item.where.attachId ?? null : null;
     openOverlay({ mod: "inkpaw-journal", kind: "popup", width: LINKS_W, height: linksNoteHeight(links.length, showChecklist, Boolean(stopId)),
       props: { role: "links", head: item.jiraKey ?? item.spot?.label ?? "Session",
@@ -1438,7 +1459,7 @@ export default class LineartJournal extends View {
       .when(links.length === 0, (el) => el.child(h_flex().h(28).pl(24).pr(10).items_center().border_b(1).border_color(RULE)
         .child(div().text_size(12).font_family(BODY_FONT).text_color(FAINT).child("No links on this row"))))
       .children(links.map((link, index) => row(`link-${index}`, link.label, link.meta, link.hot,
-        index + offset === this.active, (cx) => this.openLink(link, cx))))
+        index + offset === this.active, (cx) => this.openLink(link, cx), this.linkError?.url === link.url ? this.linkError.text : null)))
       .when(links.length > 0, (el) => el
         .child(div().h(1).flex_none().bg(RULE).opacity(0.8))
         .child(row("link-copy", "Copy all links", null, null, false, copy, null, PENCIL)));
@@ -1501,15 +1522,32 @@ export default class LineartJournal extends View {
     });
   }
 
-  // http(s) goes to the system's URL handler; a local page file to `open`.
-  openUrl(url, cx) {
-    if (/^https?:\/\//.test(url)) cx.open_url(url);
-    else exec("open", [url]);
+  // http(s) goes to the system's URL handler; a local page file to `open`. `done(opened, cx)` replaces
+  // the notebook's flash, for the links note that has to stay open to show a failure.
+  openUrl(url, cx, done = null) {
+    if (/^https?:\/\//.test(url)) {
+      cx.open_url(url);
+      done?.(true, cx);
+      return;
+    }
+    cx.spawn(async (later) => {
+      let opened = false;
+      try { opened = (await exec("open", [url])).code === 0; } catch {}
+      if (done) done(opened, later);
+      else if (!opened) this.flash(later, "Couldn't open that page");
+    });
   }
 
   openLink(link, cx) {
-    this.openUrl(link.url, cx);
-    closeOverlay(props().overlay);
+    this.linkError = null;
+    this.openUrl(link.url, cx, (opened, later) => {
+      if (opened) {
+        closeOverlay(props().overlay);
+        return;
+      }
+      this.linkError = { url: link.url, text: "Couldn't open it" };
+      later.notify();
+    });
   }
 
   copyLinks(links, cx) {
@@ -1619,7 +1657,8 @@ export default class LineartJournal extends View {
     return el.flex_none().underline().cursor_pointer()
       .text_size(12).line_height(`${ROW}px`).font_family(BODY_FONT).text_color(color)
       .hover((style) => style.text_color(INK))
-      .on_click(on_click).child(label);
+      // A link sits inside a row that has its own on_click (Snooze in a stall row); keep the click here.
+      .on_click((event, cx) => { cx.stop_propagation(); on_click(event, cx); }).child(label);
   }
 
   searchLine() {
@@ -1732,7 +1771,7 @@ export default class LineartJournal extends View {
       else this.flash(cx, "No page to open on this row");
     }, PENCIL, "today-page"));
     actions.push(this.textLink("Links…", (event, cx) => this.openLinks(item, cx), PENCIL, "today-links"));
-    if (Boolean(item.terminal) && item.raw?.t === "s" && !item.hasChecklist) {
+    if (canRequestChecklist(item)) {
       actions.push(this.textLink("Request checklist", (event, cx) => {
         const prompt = item.raw?.status === "busy" ? CHECKLIST_QUEUED_PROMPT : CHECKLIST_PROMPT;
         cx.spawn(async (later) => {
