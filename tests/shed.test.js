@@ -109,3 +109,25 @@ test("a checked accounts menu, the role herdr-app check loads, runs nothing", ()
   delete globalThis.herdrState;
   delete globalThis.herdrExec;
 });
+
+test("the accounts menu marks this pane's account only when a Claude Code pane is focused", () => {
+  const open = (fields) => {
+    globalThis.herdrState = {};
+    globalThis.herdrOverlays = [];
+    const view = shedView({ agents: [], notInstalled: [], codex: null, session: null, ...fields });
+    view.openMenu();
+    return globalThis.herdrOverlays.at(-1).props;
+  };
+  const none = open({});
+  assert.equal(none.current, "default");
+  assert.equal(none.here, null, "cca's global default is not this pane's account");
+  assert.equal(open({ focusKey: "123", currentKey: "123", current: "work" }).here, "work");
+  assert.equal(open({ demo: true, current: "work" }).here, "work");
+
+  globalThis.herdrState = { props: { role: "menu", current: "default", here: null } };
+  const menu = new ClaudeAccounts();
+  menu.init({}, { spawn() {}, notify() {}, timer: { after() {}, every() {} }, focus_handle() { return { focus() {}, is_focused() { return false; } }; } });
+  assert.equal(menu.here, null);
+  delete globalThis.herdrState;
+  delete globalThis.herdrOverlays;
+});

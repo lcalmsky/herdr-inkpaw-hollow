@@ -421,6 +421,7 @@ export default class ClaudeAccounts extends View {
     this.notInstalled = Array.isArray(p.notInstalled) ? p.notInstalled : [];
     this.codex = p.codex ?? null;
     this.current = p.current ?? "default";
+    this.here = p.here ?? null;
     this.globalDefault = p.globalDefault ?? "default";
     this.session = p.session ?? null;
     this.readError = p.error ?? null;
@@ -433,6 +434,7 @@ export default class ClaudeAccounts extends View {
     if (this.demo) {
       this.accounts = DEMO.shed.accounts;
       this.current = DEMO.shed.current;
+      this.here = DEMO.shed.current;
       this.globalDefault = DEMO.shed.globalDefault;
       this.codex = DEMO.shed.codex;
       this.readError = null;
@@ -707,6 +709,12 @@ export default class ClaudeAccounts extends View {
       .when(on, (el) => el.child(div().size(6).rounded(3).bg(INK.t1)));
   }
 
+  // The account the focused Claude Code pane runs as, or null with none focused: cca then reports the
+  // global default, which is not this pane's account.
+  paneAccount() {
+    return this.demo ? this.current ?? null : railHere(this.focusKey, this.currentKey, this.current, this.heldHere);
+  }
+
   accountChip() {
     const name = this.current ?? "default";
     const label = this.readError ? "?" : display(this.accounts.find((a) => a.name === name)) || name;
@@ -738,7 +746,7 @@ export default class ClaudeAccounts extends View {
       notInstalledCount: notInstalled.length,
     }));
     openOverlay({ mod: "inkpaw-shed", kind: "popup", width: 460, height,
-      props: { role: "menu", current: name, globalDefault: this.globalDefault ?? "default",
+      props: { role: "menu", current: name, here: this.paneAccount(), globalDefault: this.globalDefault ?? "default",
         accounts: list, session: this.session, error: this.readError ?? null,
         agents, notInstalled, codex } });
   }
@@ -850,7 +858,7 @@ export default class ClaudeAccounts extends View {
       if ((pid == null ? "" : String(pid)) !== this.focusKey) this.readAccounts(cx, pid);
     }
     const list = this.accounts?.length ? this.accounts : [{ name: "default", email: "", usage: null }];
-    this.shedAxe = this.demo ? this.current : railHere(this.focusKey, this.currentKey, this.current, this.heldHere);
+    this.shedAxe = this.paneAccount();
     if (this.focusKey && this.currentKey === this.focusKey) this.heldHere = this.current;
     return div().id("shed").relative().size_full().min_h(0).bg(INK.card).overflow_hidden()
       .child(this.shedRules())
@@ -1306,7 +1314,7 @@ export default class ClaudeAccounts extends View {
     const key = codex ? `codex:${a.name}` : a.name;
     const on = codex ? a.name === this.codexState().active : a.name === this.claudeDefault();
     if (this.rename?.key === key) return this.renameRow(a, key, on, true);
-    const tag = !codex && a.name === (this.current ?? "default");
+    const tag = !codex && a.name === this.here;
     const hovered = this.hover === key;
     const select = (cx) => (codex ? this.useCodex(a.name, cx) : this.useAccount(a.name, cx));
     const open = () => (codex ? this.openCodex(a.name) : this.openAgent(a.name));
