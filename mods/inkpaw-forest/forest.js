@@ -110,23 +110,48 @@ export const KEY_TAG_Y = 22;
 const KEY_TAG_MIN_Y = 20;
 
 // Where the keyboard plank rests. It hangs under the vine, its bottom above the highest cabin
-// signboard plank; when that would push it out of view it slides right until it clears every
-// plank it would cross, in design coordinates. Rects are {x, y, w, h} in the same space.
+// signboard plank; when that would push it out of view, or it would cross something in `avoid`
+// (the search sign, the "?" note), it slides right until it clears every rect it would cross, in
+// design coordinates. With no clear place it rests where it crosses the fewest and returns
+// clear: false, so the caller can try a narrower plank. Rects are {x, y, w, h} in the same space.
 export function keyPlankRest({
   x = KEY_TAG_X, w, h, y = KEY_TAG_Y, minY = KEY_TAG_MIN_Y,
-  planks = [], gap = SIGN_CLEAR, limit = 1600,
+  planks = [], avoid = [], gap = SIGN_CLEAR, limit = 1600,
 } = {}) {
   const width = Math.max(1, Number(w) || 0);
   const height = Math.max(1, Number(h) || 0);
-  const rects = (Array.isArray(planks) ? planks : [])
+  const finite = (list) => (Array.isArray(list) ? list : [])
     .filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+  const rects = finite(planks);
+  const all = [...rects, ...finite(avoid)];
   const above = rects.length ? Math.min(...rects.map((p) => p.y)) - gap - height : Infinity;
-  if (above >= minY) return { x, y: Math.min(y, above), shifted: false };
-  const crosses = (left) => rects.some((p) => left < p.x + p.w + gap && left + width + gap > p.x
-    && y < p.y + p.h + gap && y + height + gap > p.y);
-  let left = x;
-  while (left + width <= limit && crosses(left)) left += 1;
-  return { x: left, y, shifted: left !== x };
+  const top = above >= minY ? Math.min(y, above) : y;
+  const crossing = (left) => all.filter((p) => left < p.x + p.w + gap && left + width + gap > p.x
+    && top < p.y + p.h + gap && top + height + gap > p.y).length;
+  let best = x, fewest = Infinity;
+  for (let left = x; left + width <= limit; left += 1) {
+    const count = crossing(left);
+    if (!count) return { x: left, y: top, shifted: left !== x, clear: true };
+    if (count < fewest) { fewest = count; best = left; }
+  }
+  return { x: best, y: top, shifted: best !== x, clear: !all.length };
+}
+
+// The "?" note in design px: its text never goes under 11 px on screen, so at a small scale the
+// paper grows to hold the columns instead of the lines running past its edge. `gap` is screen px,
+// like the note's flex gap; widths are estimated as labelWidth does, which runs wider than Gowun Dodum.
+export const HELP_NOTE = { w: 320, h: 52, padX: 9, padY: 6, gap: 10 };
+export function helpNoteSize(columns, textSize, scale) {
+  const s = scale || 1;
+  const lineH = Math.ceil(textSize * 1.3);
+  const widest = (lines) => Math.max(0, ...lines.map((line) => labelWidth(line, textSize, 0.52)));
+  const textW = columns.reduce((sum, lines) => sum + widest(lines), 0) + HELP_NOTE.gap * Math.max(0, columns.length - 1);
+  const rows = Math.max(0, ...columns.map((lines) => lines.length));
+  return {
+    w: Math.max(HELP_NOTE.w, Math.ceil(textW / s) + HELP_NOTE.padX * 2),
+    h: Math.max(HELP_NOTE.h, Math.ceil((rows * lineH) / s) + HELP_NOTE.padY * 2),
+    lineH,
+  };
 }
 
 // A cabin's signboard: planks hanging from the roof peak on two ink cords, stacked upward into
@@ -240,7 +265,7 @@ export function matches(fields, tokens) {
   return matchesQuery(tokens.join(" "), fields);
 }
 
-export function agentFields(agent, topic, cwd) {
+export function agentFields(agent, topic, cwd, prs = []) {
   return fieldsOf({
     topic,
     title: agent?.title,
@@ -248,6 +273,7 @@ export function agentFields(agent, topic, cwd) {
     tab: agent?.tab_name,
     cwd,
     ticket: [spaceKey(agent?.space_name), spaceKey(topic)],
+    pr: prs,
   });
 }
 
@@ -260,11 +286,11 @@ export function spaceFields(space) {
 }
 
 // Animals and cabins a query keeps. A cabin stays when one of its spaces or one of its animals matches.
-export function searchSets({ spaces, agents, cabinOf, cabinCount, tokens, topics = {}, cwdByAddress = new Map() }) {
+export function searchSets({ spaces, agents, cabinOf, cabinCount, tokens, topics = {}, prs = {}, cwdByAddress = new Map() }) {
   const query = tokens.join(" ");
   const animals = new Set();
   for (const agent of agents) {
-    if (matchesQuery(query, agentFields(agent, topics[agent.address], cwdByAddress.get(agent.address)))) {
+    if (matchesQuery(query, agentFields(agent, topics[agent.address], cwdByAddress.get(agent.address), prs[agent.address]))) {
       animals.add(agent.address);
     }
   }

@@ -1,6 +1,6 @@
 import { View, div, image, PathBuilder } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { agents, spaces, terminals, panes, focused, props, run, exec, nextCommand, shared, setShared, openOverlay } from "herdr";
+import { agents, spaces, terminals, panes, focused, props, run, exec, checking, nextCommand, shared, setShared, openOverlay } from "herdr";
 import { DATA } from "./data.js";
 import { DEMO } from "./demo.js";
 import { DESIGN, fit, layoutScene, bubbleText, bubbleWidth, bubbleLevels, walkMs, hash } from "./scene.js";
@@ -20,6 +20,7 @@ import {
   greetPoses,
   idleShells,
   keyPlankRest,
+  helpNoteSize,
   labelWidth,
   nextOf,
   plankGrainPoints,
@@ -67,7 +68,7 @@ const FOCUS_WATCH_MS = 100;
 // fixed, so the signs hang from these points rather than guessing a shared roof line.
 const ROOF_PEAK = [80, 76, 82, 78, 76, 82, 80, 78];
 const GROUND = L.groundY;
-const HELP = [
+export const HELP = [
   "← →   Walk between animals",
   "⌥ ← →  First · last",
   "Space  The waiting one",
@@ -77,6 +78,7 @@ const HELP = [
   "⌘⌫  Clear the search",
   "?   Fold this note",
 ];
+const HELP_COLUMNS = [HELP.slice(0, 3), HELP.slice(3, 6), HELP.slice(6)];
 
 function meta(file) {
   const m = DATA.files[file];
@@ -123,6 +125,7 @@ export default class LineArtBand extends View {
     this.focusKey = null;
     this.hopKey = null;
     this.hopUp = false;
+    if (checking()) return;
     cx.spawn(async (cx) => {
       for (;;) {
         const command = await nextCommand();
@@ -532,10 +535,14 @@ export default class LineArtBand extends View {
     ];
   }
 
+  searchRect() {
+    const w = 132, h = 32;
+    return { x: DESIGN.width - 8 - w, y: 8, w, h };
+  }
+
   // A small sign in the top-right sky, clear of the cabin roofs, with the query and its count.
   searchSign(f, query, count) {
-    const w = 132, h = 32;
-    const x = DESIGN.width - 8 - w, y = 8;
+    const { x, y, w, h } = this.searchRect();
     const textSize = Math.max(11, 7 * f.s);
     return [
       this.uiPic(f, "search-sign.svg", x, y, w, h),
@@ -549,18 +556,22 @@ export default class LineArtBand extends View {
 
   // The "?" note, a wide slip of paper in the top-right sky beside the search sign: three lines a
   // column, so it stays above the roofs.
-  legend(f) {
-    const w = 320, h = 52;
-    const x = DESIGN.width - 8 - 132 - 8 - w, y = 8;
+  legendRect(f) {
     const textSize = Math.max(11, 7 * f.s);
+    const { w, h, lineH } = helpNoteSize(HELP_COLUMNS, textSize, f.s);
+    return { x: DESIGN.width - 8 - 132 - 8 - w, y: 8, w, h, textSize, lineH };
+  }
+
+  legend(f) {
+    const { x, y, w, h, textSize, lineH } = this.legendRect(f);
     const column = (lines) => div().flex().flex_col().flex_none()
-      .children(lines.map((line) => div().text_size(textSize).font_family(FONT).text_color(INK)
+      .children(lines.map((line) => div().text_size(textSize).line_height(`${lineH}px`).font_family(FONT).text_color(INK)
         .whitespace_nowrap().child(line)));
     return [
       this.uiPic(f, "note.svg", x, y, w, h),
       div().absolute().left(f.X(x + 9)).top(f.Y(y + 6)).w((w - 18) * f.s)
         .flex().gap(10)
-        .children([column(HELP.slice(0, 3)), column(HELP.slice(3, 6)), column(HELP.slice(6))]),
+        .children(HELP_COLUMNS.map(column)),
     ];
   }
 
@@ -582,15 +593,22 @@ export default class LineArtBand extends View {
   // The keyboard plank: a cabin signboard hanging from the top vine on two cords. It drops in when
   // the forest takes the keyboard and rises away when it gives it back, staying rendered above the
   // band while hidden so both moves can play.
-  keyTag(f, planks = []) {
+  // With no clear place for the full plank, the hint goes and the plank rests where its name fits.
+  keyTag(f, planks = [], avoid = []) {
     const on = Boolean(this.handle?.is_focused?.());
     const textSize = Math.max(SIGN_MIN_TEXT, SIGN_TEXT * f.s);
     const h = textSize + SIGN_PAD_Y * 2;
     const textW = labelWidth(KEY_TAG.text, textSize, 0.52);
     const hintW = labelWidth(KEY_TAG.hint, textSize, 0.52);
-    const w = Math.max(SIGN_MIN_W * f.s, textW + hintW + 6 + SIGN_PAD_X * 2);
     const scale = f.s || 1;
-    const rest = keyPlankRest({ x: KEY_TAG_X, w: w / scale, h: h / scale, planks });
+    const rested = (width) => keyPlankRest({ x: KEY_TAG_X, w: width / scale, h: h / scale, planks, avoid });
+    let w = Math.max(SIGN_MIN_W * f.s, textW + hintW + 6 + SIGN_PAD_X * 2);
+    let rest = rested(w);
+    const hint = rest.clear;
+    if (!hint) {
+      w = Math.max(SIGN_MIN_W * f.s, textW + SIGN_PAD_X * 2);
+      rest = rested(w);
+    }
     // -40 is band-local, so the hidden plank sits above the band whatever the letterboxing.
     const top = on ? f.Y(rest.y) : -KEY_DROP;
     const duration = on ? KEY_DROP_MS : KEY_RISE_MS;
@@ -615,8 +633,8 @@ export default class LineArtBand extends View {
         .child(h_flex().absolute().left(0).top(0).w(w).h(h).items_center().justify_center().gap(6)
           .child(div().text_size(textSize).font_family(HEADING_FONT).text_color(ACCENT).whitespace_nowrap()
             .child(KEY_TAG.text))
-          .child(div().text_size(textSize).font_family(HEADING_FONT).text_color(MUTED).whitespace_nowrap()
-            .child(KEY_TAG.hint))),
+          .when(hint, (el) => el.child(div().text_size(textSize).font_family(HEADING_FONT).text_color(MUTED).whitespace_nowrap()
+            .child(KEY_TAG.hint)))),
     ];
   }
 
@@ -778,6 +796,7 @@ export default class LineArtBand extends View {
     const query = state.query ?? "";
     const tokens = tokensOf(query);
     const topics = state.topics ?? {};
+    const prs = state.prs ?? {};
     const selected = this.demo ? DEMO.selected : state.selected ?? null;
 
     const cwdByAddress = new Map(termList.map((terminal) => [terminal.address, cwdOf(terminal)]));
@@ -791,7 +810,7 @@ export default class LineArtBand extends View {
     }
 
     const found = tokens.length
-      ? searchSets({ spaces: spaceList, agents: agentList, cabinOf, cabinCount: CABINS, tokens, topics, cwdByAddress })
+      ? searchSets({ spaces: spaceList, agents: agentList, cabinOf, cabinCount: CABINS, tokens, topics, prs, cwdByAddress })
       : null;
     const cabinDim = Array.from({ length: CABINS }, (_, i) => Boolean(found && !found.cabins[i]));
 
@@ -855,9 +874,16 @@ export default class LineArtBand extends View {
     })));
 
     const overlay = [...this.signpost(f)];
-    if (tokens.length) overlay.push(...this.searchSign(f, query, found.animals.size));
-    if (this.showKeys) overlay.push(...this.legend(f));
-    overlay.push(...this.keyTag(f, signPlanks));
+    const avoid = [];
+    if (tokens.length) {
+      overlay.push(...this.searchSign(f, query, found.animals.size));
+      avoid.push(this.searchRect());
+    }
+    if (this.showKeys) {
+      overlay.push(...this.legend(f));
+      avoid.push(this.legendRect(f));
+    }
+    overlay.push(...this.keyTag(f, signPlanks, avoid));
     if (chosen) overlay.push(this.firefly(f, chosen));
     this.ready = true;
 
